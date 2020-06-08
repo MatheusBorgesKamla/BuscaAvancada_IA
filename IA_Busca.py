@@ -226,10 +226,6 @@ def distance_calc(target, pos):
     mod = ((dist_x**2) + (dist_y**2))**(1/2)
     return mod
 
-def manhattan_dist(target, pos):
-    dist = abs(target[0] - pos[0]) + abs(target[1] - pos[1])
-    return dist
-
 #Classe utilizada para montar grafo com pesos (guardará os verticés adjacentes e o peso desse respectivo ao vértice final)
 class vertex_weight:
     def __init__(self, vertex, weigth):
@@ -328,20 +324,24 @@ print("\nTamanho do caminho: ", len(BestFS_path))
 print("\nTempo de execução: ", fim)
 
 
-#Gerando imagem do labirinto com o caminho
-img_BestFS = np.copy(img_maze)
-for v in BestFS_path:
-    img_BestFS[v[0]][v[1]] = [0,255,0]
-
-img_BestFS[ini_position[0]][ini_position[1]] = [0,0,255]
-img_BestFS[fin_position[0]][fin_position[1]] = [255,0,0]
+#Classe utilizada para montar grafo com pesos (guardará os verticés adjacentes e o peso desse respectivo ao vértice final)
+class vertex_weight_star:
+    def __init__(self, vertex, weigth_h, weigth_g):
+        self.vertex = vertex
+        self.weigth_h = weigth_h
+        self.weigth_g = weigth_g
+        self.weigth_f = weigth_h + weigth_g
     
-f3, ax3 = plt.subplots(figsize=(20, 10))
-ax3.imshow(img_BestFS)
-ax3.set_title('Labirinto - Busca Best First', fontsize=18)
+    def __str__(self):
+        s = "adj: (" + str(self.vertex[0]) + "," + str(self.vertex[1]) + ") h: " + str(self.weigth_h) + " g: " + str(self.weigth_g)+ " f: " + str(self.weigth_f)
+        return s
 
-#Dicionário que guardará o grafo com os pesos para o A*
-weighted_graph_a = {}
+
+# In[10]:
+
+
+#Dicionário que guardará o grafo com os pesos
+double_weighted_graph = {}
 
 #Para cada vértice do grafo
 for source_vertex in graph:
@@ -350,17 +350,73 @@ for source_vertex in graph:
     #Para cada vértice adjacente do atual
     for dst_vertex in graph[source_vertex]:
         #Calcula a distância do adjacente ao vértice final para ser o peso da ligação
-        dist_fin = manhattan_dist(fin_position, dst_vertex)
-        dist_ini = manhattan_dist(ini_position, dst_vertex)
-        dist = dist_ini + dist_fin
-        #Adiciona na lista auxiliar
-        aux.append(vertex_weight(dst_vertex,dist))
+        dist = distance_calc(fin_position, dst_vertex)
+        #Adiciona na lista auxiliargraph
+        aux.append(vertex_weight_star(dst_vertex,dist,100))
     #Adiciona a lista de vértices adjacentes no dicionário com o respectivo vértice
-    weighted_graph_a[source_vertex] = aux
+    double_weighted_graph[source_vertex] = aux
 
-#Iremos reutilizar o código do Best_First para o A*, pois o que mudará mesmo será a heurística
+
+# # Busca A*
+# 
+# Iremos implementar agora um algoritmo que realiza uma busca informada, a A* que utiliza da distância da posição de origem e da posição de destino para determinar o melhor caminho a se seguir
+# 
+
+#Função que irá partir do vértice final encontrando seus antecessores e assim formando o caminho e deixando ordenado
+def backtrace(parent, start, end):
+    path = [end]
+    cont = 0
+    while path[-1] != start:
+        path.append(parent[path[-1]])
+        cont = cont + 1
+    path.reverse()
+    return path
+
+def A_Star(graph, v_ini, v_fin):
+    #Fila que guardará os vértices a serem explorados (explorar os vizinhos) de forma ordenada (menor pesos no início da fila)
+    fila_prioridade = []
+    #Guarda os vértices visitados com respectiva profundidade
+    visited = {}
+    #Contador de profundidade para os vértices visitados
+    cont = 0
+    #Insiro o primeiro vértice como visitado já
+    visited[v_ini] = cont
+    #Insiro o primeiro vértice na fila   
+    fila_prioridade.append(vertex_weight_star(v_ini, distance_calc(v_fin,v_ini),0))
+    #Dicionário que guarda um vértice com seu antecessor na ordem de exploração
+    parent = {}
+    #Enquanto existe vértices a na fila
+    while fila_prioridade:
+        #Pego o vértice no início da fila removendo-o de lá
+        aux = fila_prioridade.pop(0)
+        vertex = aux.vertex
+        #Se ele for o vértice final
+        if vertex == v_fin:
+            #Retorno os visitados e faço a construção do caminho com a backtrace
+            return backtrace(parent, v_ini, v_fin), visited
+        #Se não
+        else:
+            #Incremento o contador de profundidade
+            cont = cont + 1
+            #Para cada vizinho do vértice atual
+            for neighbor in graph[vertex]:
+                #Se o vizinho já não foi visitado
+                if neighbor.vertex not in visited:
+                    #Adiciona como visitado e sua profundidade
+                    visited[neighbor.vertex] = cont
+                    #É atribuido o valor heurístico g(n) ao novo nó, somando a distância deste ao seu pai com g(n-1) de seu pai
+                    neighbor.weigth_g = distance_calc(neighbor.vertex,vertex) + aux.weigth_g
+                    #É atualizado o valor heurístico f(n), sendo f(n) = g(n) + h(n)
+                    neighbor.weigth_f = neighbor.weigth_g + neighbor.weigth_h
+                    #Adiciono o vizinho na filaprint("\nTempo de execução: ", fim) para depois explorá-lo
+                    fila_prioridade.append(neighbor)
+                    #Ordeno a fila de acordo com o peso da ligação
+                    fila_prioridade.sort(key=lambda x: x.weigth_f)
+                    #Adiciono o vizinho com seu "pai" que é o vértice atual em análise
+                    parent[neighbor.vertex] = vertex
+#Aplicando o A Star Search no grafo com pesos e printando as informações
 start_time = timeit.default_timer()
-AStar_path, AStar_visited = Best_First_Search(weighted_graph_a, ini_position, fin_position)
+AStar_path, AStar_visited = A_Star(double_weighted_graph, ini_position, fin_position)
 fim = timeit.default_timer() - start_time
 
 print("\n----- Busca A*: -----")
